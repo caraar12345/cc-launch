@@ -10,3 +10,5 @@ Inline BubbleTea (v1) launcher that picks a directory and `exec`s `claude` in it
 - `upgrade.go`: `claude upgrade` started at launch in the background, hard 30s cap. If the user picks a directory before it finishes, launch waits for it.
 
 Commands: `go build -o cc-launch .`, `go test ./...`.
+
+CI: `.github/workflows/build.yml` runs gofmt/vet/test, cross-builds darwin+linux (amd64/arm64) as artifacts, and on a `v*` tag publishes a GitHub release with the tarballs. Windows is unsupported (`syscall.Exec`).
