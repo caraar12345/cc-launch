@@ -83,7 +83,7 @@ jobs:
             --code-signature-flags
             runtime
             --binary-identifier
-            com.caraar12345.cc-launch
+            uk.co.aaroncarson.cc-launch
       # Notarization only for release builds. A bare binary can't be stapled;
       # Gatekeeper looks the ticket up online by the binary's hash.
       - name: Write App Store Connect key
