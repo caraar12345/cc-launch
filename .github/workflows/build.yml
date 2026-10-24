@@ -78,6 +78,12 @@ jobs:
           input_path: cc-launch
           p12_file: ./certs/cert.p12
           p12_password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+          # Notarization requires the hardened runtime.
+          sign_args: |
+            --code-signature-flags
+            runtime
+            --binary-identifier
+            com.caraar12345.cc-launch
       # Notarization only for release builds. A bare binary can't be stapled;
       # Gatekeeper looks the ticket up online by the binary's hash.
       - name: Write App Store Connect key
