@@ -11,4 +11,4 @@ Inline BubbleTea (v1) launcher that picks a directory and `exec`s `claude` in it
 
 Commands: `go build -o cc-launch .`, `go test ./...`.
 
-CI: `.github/workflows/build.yml` runs gofmt/vet/test, cross-builds darwin/linux/windows (amd64/arm64; .zip for Windows) as artifacts, and on a `v*` tag publishes a GitHub release with the tarballs.
+CI: `.github/workflows/build.yml` runs gofmt/vet/test, cross-builds darwin/linux/windows (amd64/arm64; .zip for Windows) on one Linux runner, signs the darwin binaries in the build job (indygreg/apple-code-sign-action; secrets `APPSTORE_CERTIFICATES_FILE_BASE64` and `APPSTORE_CERTIFICATES_PASSWORD`; skipped on PRs), and on a `v*` tag publishes a GitHub release with the archives. Action versions are pinned via `actions.lock` (`gh actions-lock`).

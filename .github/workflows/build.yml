@@ -13,8 +13,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v4.4.0
+      - uses: actions/setup-go@v5.6.0
         with:
           go-version-file: go.mod
       - run: test -z "$(gofmt -l .)"
@@ -29,8 +29,8 @@ jobs:
         goos: [darwin, linux, windows]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v4.4.0
+      - uses: actions/setup-go@v5.6.0
         with:
           go-version-file: go.mod
       - name: Build
@@ -39,15 +39,31 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: |
+          if [ "$GOOS" = windows ]; then out=cc-launch.exe; else out=cc-launch; fi
+          go build -trimpath -ldflags "-s -w" -o "$out" .
+      - name: Decode secret
+        if: matrix.goos == 'darwin' && github.event_name != 'pull_request'
+        uses: davidSchuppa/base64Secret-toFile-action@v3
+        with:
+            secret: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
+            filename: cert.p12
+            destination-path: ./certs
+      - name: Sign a Mach-O binary
+        if: matrix.goos == 'darwin' && github.event_name != 'pull_request'
+        uses: indygreg/apple-code-sign-action@v1
+        with:
+          input_path: cc-launch
+          p12_file: ./certs/cert.p12
+          p12_password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+      - name: Package
+        run: |
           name=cc-launch_${{ matrix.goos }}_${{ matrix.goarch }}
-          if [ "$GOOS" = windows ]; then
-            go build -trimpath -ldflags "-s -w" -o cc-launch.exe .
+          if [ "${{ matrix.goos }}" = windows ]; then
             zip "$name.zip" cc-launch.exe
           else
-            go build -trimpath -ldflags "-s -w" -o cc-launch .
             tar -czf "$name.tar.gz" cc-launch
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4.6.2
         with:
           name: cc-launch_${{ matrix.goos }}_${{ matrix.goarch }}
           path: |
@@ -61,7 +77,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4.3.0
         with:
           pattern: cc-launch_*
           merge-multiple: true
