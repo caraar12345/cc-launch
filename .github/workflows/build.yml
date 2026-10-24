@@ -24,6 +24,8 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
+    # Signing secrets live in the `production` environment; only darwin needs them.
+    environment: ${{ matrix.goos == 'darwin' && github.event_name != 'pull_request' && 'production' || null }}
     strategy:
       matrix:
         goos: [darwin, linux, windows]
