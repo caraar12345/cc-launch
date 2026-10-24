@@ -3,78 +3,20 @@ name: build
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  # A push to main whose VERSION has no GitHub release yet is a release build.
+  version:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4.4.0
-      - uses: actions/setup-go@v5.6.0
-        with:
-          go-version-file: go.mod
-      - run: test -z "$(gofmt -l .)"
-      - run: go vet ./...
-      - run: go test ./...
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    # Signing secrets live in the `production` environment; only darwin needs them.
-    environment: ${{ matrix.goos == 'darwin' && github.event_name != 'pull_request' && 'production' || null }}
-    strategy:
-      matrix:
-        goos: [darwin, linux, windows]
-        goarch: [amd64, arm64]
-    steps:
-      - uses: actions/checkout@v4.4.0
-      - uses: actions/setup-go@v5.6.0
-        with:
-          go-version-file: go.mod
-      - name: Build
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "0"
-        run: |
-          if [ "$GOOS" = windows ]; then out=cc-launch.exe; else out=cc-launch; fi
-          go build -trimpath -ldflags "-s -w" -o "$out" .
-      - name: Decode secret
-        if: matrix.goos == 'darwin' && github.event_name != 'pull_request'
-        uses: davidSchuppa/base64Secret-toFile-action@v3
-        with:
-            secret: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
-            filename: cert.p12
-            destination-path: ./certs
-      - name: Sign a Mach-O binary
-        if: matrix.goos == 'darwin' && github.event_name != 'pull_request'
-        uses: indygreg/apple-code-sign-action@v1
-        with:
-          input_path: cc-launch
-          p12_file: ./certs/cert.p12
-          p12_password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
-      - name: Package
-        run: |
-          name=cc-launch_${{ matrix.goos }}_${{ matrix.goarch }}
-          if [ "${{ matrix.goos }}" = windows ]; then
-            zip "$name.zip" cc-launch.exe
-          else
-            tar -czf "$name.tar.gz" cc-launch
-          fi
-      - uses: actions/upload-artifact@v4.6.2
-        with:
-          name: cc-launch_${{ matrix.goos }}_${{ matrix.goarch }}
-          path: |
-            cc-launch_*.tar.gz
-            cc-launch_*.zip
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release:
+    if: needs.version.outputs.release == 'true'
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -83,7 +25,11 @@ jobs:
         with:
           pattern: cc-launch_*
           merge-multiple: true
+      # Creates tag vX.Y.Z at this commit; notes cover everything since the
+      # previous release.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" cc-launch_* --repo "$GITHUB_REPOSITORY" --generate-notes
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: gh release create "v$VERSION" cc-launch_* --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes --latest

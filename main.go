@@ -2,12 +2,17 @@
 package main
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
+
+//go:embed VERSION
+var version string
 
 func main() {
 	if err := run(); err != nil {
@@ -19,8 +24,12 @@ func main() {
 func run() error {
 	if len(os.Args) > 1 {
 		arg := os.Args[1]
-		if arg == "-h" || arg == "--help" {
+		switch arg {
+		case "-h", "--help":
 			fmt.Println("usage: cc-launch [path]")
+			return nil
+		case "-v", "--version":
+			fmt.Println("cc-launch", strings.TrimSpace(version))
 			return nil
 		}
 		dir, err := filepath.Abs(expandHome(arg))

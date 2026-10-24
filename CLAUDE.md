@@ -11,4 +11,6 @@ Inline BubbleTea (v1) launcher that picks a directory and `exec`s `claude` in it
 
 Commands: `go build -o cc-launch .`, `go test ./...`.
 
-CI: `.github/workflows/build.yml` runs gofmt/vet/test, cross-builds darwin/linux/windows (amd64/arm64; .zip for Windows) on one Linux runner, signs the darwin binaries in the build job (indygreg/apple-code-sign-action; secrets in the `production` environment: `APPSTORE_CERTIFICATES_FILE_BASE64` and `APPSTORE_CERTIFICATES_PASSWORD`; skipped on PRs), and on a `v*` tag publishes a GitHub release with the archives. Action versions are pinned via `actions.lock` (`gh actions-lock`).
+Versioning/release: `VERSION` (plain `MAJOR.MINOR.PATCH`) is the single source of truth; it is `go:embed`ded for `cc-launch --version`. Bump it and push to main to release: CI sees no `vX.Y.Z` release exists, builds, signs and notarizes the darwin binaries, tags the commit and publishes a release with auto-generated notes since the previous release. There is no tag trigger.
+
+CI: `.github/workflows/build.yml` jobs: `version` (release or not), `test` (gofmt/vet/test), `build` (cross-builds darwin/linux/windows, amd64/arm64, on one Linux runner; .zip for Windows; darwin entries run in the `production` environment and are signed with indygreg/apple-code-sign-action, skipped on PRs; notarized on release builds only via `APP_STORE_CONNECT_KEY`, secrets `APPSTORE_CERTIFICATES_FILE_BASE64` + `APPSTORE_CERTIFICATES_PASSWORD`), `release`. Action versions are pinned via `actions.lock` (`gh actions-lock`).
