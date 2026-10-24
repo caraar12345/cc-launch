@@ -130,15 +130,27 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4.4.0
+        with:
+          fetch-depth: 0 # full history and tags for the commit list
       - uses: actions/download-artifact@v4.3.0
         with:
           pattern: cc-launch_*
           merge-multiple: true
-      # Creates tag vX.Y.Z at this commit; notes cover everything since the
-      # previous release.
+      # Creates tag vX.Y.Z at this commit. Notes list every commit since the
+      # previous release tag, followed by GitHub's generated notes.
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ needs.version.outputs.version }}
-        run: gh release create "v$VERSION" cc-launch_* --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes --latest
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match 'v*' HEAD 2>/dev/null || true)
+          {
+            echo "## Commits${prev:+ since $prev}"
+            echo
+            git log --no-merges --pretty='- %s (%h)' ${prev:+"$prev..HEAD"}
+            echo
+          } > notes.md
+          gh release create "v$VERSION" cc-launch_* --target "$GITHUB_SHA" \
+            --title "v$VERSION" --notes-file notes.md --generate-notes --latest
