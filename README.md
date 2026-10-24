@@ -9,6 +9,8 @@ cc-launch
 
 - Type to filter your saved directories.
 - Type `/` to browse under your `default_prefix`: `/cc-launch` + enter opens Claude Code in `<default_prefix>/cc-launch`. Tab completes, so `/foo/` descends further.
+- Pick `other…` at the bottom of the list to type any path.
+- `cc-launch <path>` skips the picker and launches straight into that directory.
 - On start it runs `claude upgrade` (max 30s) in the background; launching waits for it.
 
 ## Config

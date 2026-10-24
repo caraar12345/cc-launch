@@ -107,7 +107,11 @@ type pickerModel struct {
 	spin   spinner.Model
 
 	items  []string
-	cursor int
+	cursor int // len(items) is the trailing "other…" row
+
+	direct bool // path given on the command line: no list, just upgrade and launch
+	other  bool // free-form path entry mode
+	path   textinput.Model
 
 	upgrading bool
 	upStatus  string // final upgrade line once finished
@@ -123,11 +127,15 @@ func newPickerModel(cfg *Config) pickerModel {
 	ti.Prompt = "❯ "
 	ti.Placeholder = "filter, or / to browse"
 	ti.Focus()
+	pi := textinput.New()
+	pi.Prompt = "path: "
+	pi.Placeholder = "~/some/dir"
 	sp := spinner.New(spinner.WithSpinner(spinner.MiniDot))
 	m := pickerModel{
 		cfg:       cfg,
 		prefix:    expandHome(cfg.DefaultPrefix),
 		input:     ti,
+		path:      pi,
 		spin:      sp,
 		upgrading: true,
 	}
@@ -149,7 +157,7 @@ func (m *pickerModel) refresh() {
 		m.items = filterDirs(dirs, v)
 	}
 	if m.cursor >= len(m.items) {
-		m.cursor = max(0, len(m.items)-1)
+		m.cursor = len(m.items)
 	}
 }
 
@@ -193,6 +201,9 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.other {
+			return m.updateOther(msg)
+		}
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			m.cancelled = true
@@ -203,12 +214,12 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "down", "ctrl+n":
-			if m.cursor < len(m.items)-1 {
+			if m.cursor < len(m.items) {
 				m.cursor++
 			}
 			return m, nil
 		case "tab":
-			if m.browsing() && len(m.items) > 0 {
+			if m.browsing() && m.cursor < len(m.items) {
 				rel, err := filepath.Rel(m.prefix, m.items[m.cursor])
 				if err == nil {
 					m.input.SetValue("/" + filepath.ToSlash(rel) + "/")
@@ -235,17 +246,48 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m pickerModel) choose() (tea.Model, tea.Cmd) {
-	if len(m.items) == 0 {
-		m.notice = "no matching directory"
-		return m, nil
+	if m.cursor == len(m.items) { // "other…"
+		m.other = true
+		m.notice = ""
+		m.path.SetValue("")
+		return m, m.path.Focus()
 	}
-	dir := m.items[m.cursor]
+	return m.launchDir(m.items[m.cursor])
+}
+
+// launchDir quits with dir chosen, or parks it until the upgrade finishes.
+func (m pickerModel) launchDir(dir string) (tea.Model, tea.Cmd) {
 	if m.upgrading {
 		m.pending = dir
 		return m, nil
 	}
 	m.chosen = dir
 	return m, tea.Quit
+}
+
+func (m pickerModel) updateOther(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		m.cancelled = true
+		return m, tea.Quit
+	case "esc":
+		m.other = false
+		m.notice = ""
+		m.path.Blur()
+		return m, nil
+	case "enter":
+		v := strings.TrimSpace(m.path.Value())
+		dir, err := filepath.Abs(expandHome(v))
+		if v == "" || err != nil || !isDir(dir) {
+			m.notice = "not a directory"
+			return m, nil
+		}
+		return m.launchDir(dir)
+	}
+	var cmd tea.Cmd
+	m.path, cmd = m.path.Update(msg)
+	m.notice = ""
+	return m, cmd
 }
 
 func (m pickerModel) View() string {
@@ -260,19 +302,38 @@ func (m pickerModel) View() string {
 	} else {
 		b.WriteString(m.upStatus)
 	}
+	if m.direct {
+		b.WriteString("\n" + dimStyle.Render("launching "+tildify(m.pending)) + "\n")
+		return b.String()
+	}
+	if m.other {
+		b.WriteString("\n" + m.path.View() + "\n")
+		if m.notice != "" {
+			b.WriteString(errStyle.Render(m.notice) + "\n")
+		}
+		b.WriteString(dimStyle.Render("enter launch · esc back") + "\n")
+		return b.String()
+	}
 	b.WriteString("\n" + m.input.View() + "\n")
 
+	rows := make([]string, 0, len(m.items)+1)
+	for _, it := range m.items {
+		rows = append(rows, tildify(it))
+	}
+	rows = append(rows, "other…")
 	start := 0
 	if m.cursor >= maxRows {
 		start = m.cursor - maxRows + 1
 	}
-	end := min(len(m.items), start+maxRows)
+	end := min(len(rows), start+maxRows)
 	for i := start; i < end; i++ {
-		p := tildify(m.items[i])
-		if i == m.cursor {
-			b.WriteString(selStyle.Render("▸ "+p) + "\n")
-		} else {
-			b.WriteString("  " + p + "\n")
+		switch {
+		case i == m.cursor:
+			b.WriteString(selStyle.Render("▸ "+rows[i]) + "\n")
+		case i == len(m.items):
+			b.WriteString(dimStyle.Render("  "+rows[i]) + "\n")
+		default:
+			b.WriteString("  " + rows[i] + "\n")
 		}
 	}
 	if len(m.items) == 0 {
@@ -282,8 +343,8 @@ func (m pickerModel) View() string {
 		case len(m.cfg.Directories) == 0:
 			b.WriteString(dimStyle.Render("  no saved directories; type / to browse "+tildify(m.prefix)) + "\n")
 		}
-	} else if len(m.items) > end {
-		b.WriteString(dimStyle.Render(fmt.Sprintf("  … %d more", len(m.items)-end)) + "\n")
+	} else if len(rows) > end {
+		b.WriteString(dimStyle.Render(fmt.Sprintf("  … %d more", len(rows)-end)) + "\n")
 	}
 
 	if m.notice != "" {
@@ -296,6 +357,17 @@ func (m pickerModel) View() string {
 // runPicker returns the chosen directory, or "" if cancelled.
 func runPicker(cfg *Config) (string, error) {
 	final, err := tea.NewProgram(newPickerModel(cfg)).Run()
+	if err != nil {
+		return "", err
+	}
+	return final.(pickerModel).chosen, nil
+}
+
+// runDirect upgrades, then returns dir without showing the picker.
+func runDirect(dir string) (string, error) {
+	m := newPickerModel(&Config{})
+	m.direct, m.pending = true, dir
+	final, err := tea.NewProgram(m).Run()
 	if err != nil {
 		return "", err
 	}

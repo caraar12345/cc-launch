@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
@@ -17,6 +18,22 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) > 1 {
+		arg := os.Args[1]
+		if arg == "-h" || arg == "--help" {
+			fmt.Println("usage: cc-launch [path]")
+			return nil
+		}
+		dir, err := filepath.Abs(expandHome(arg))
+		if err != nil || !isDir(dir) {
+			return fmt.Errorf("%s is not a directory", arg)
+		}
+		if dir, err = runDirect(dir); err != nil || dir == "" {
+			return err
+		}
+		return launch(dir)
+	}
+
 	path, exists, err := configPath()
 	if err != nil {
 		return err
