@@ -64,6 +64,5 @@ func launch(dir string) error {
 	if err := os.Chdir(dir); err != nil {
 		return err
 	}
-	fmt.Printf("Launching Claude Code in %s\n", tildify(dir))
 	return syscall.Exec(bin, []string{"claude"}, os.Environ())
 }

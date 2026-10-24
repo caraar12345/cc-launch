@@ -42,3 +42,26 @@ func TestBrowseDirs(t *testing.T) {
 		t.Fatalf("nested browse failed: %v", got)
 	}
 }
+
+func TestParseUpgrade(t *testing.T) {
+	b, a := parseUpgrade("Current version: 2.1.310\nChecking for updates to latest version...\nClaude Code is up to date (2.1.310)\n")
+	if b != "2.1.310" || a != "2.1.310" {
+		t.Fatalf("got %q %q", b, a)
+	}
+	b, a = parseUpgrade("Current version: 2.1.309\nChecking...\nSuccessfully updated from 2.1.309 to version 2.1.310\n")
+	if b != "2.1.309" || a != "2.1.310" {
+		t.Fatalf("got %q %q", b, a)
+	}
+}
+
+func TestParseUpgradeRealOutput(t *testing.T) {
+	// Wording taken from anthropics/claude-code#40987 and #73830.
+	b, a := parseUpgrade("Current version: 2.1.86\nChecking for updates to latest version...\nSuccessfully updated from 2.1.86 to version 2.1.87\n")
+	if b != "2.1.86" || a != "2.1.87" {
+		t.Fatalf("got %q %q", b, a)
+	}
+	b, a = parseUpgrade("Current version: 2.1.200\nChecking for updates to latest version...\nUpdating to 2.1.199...\nClaude Code is up to date (2.1.200\n")
+	if b != "2.1.200" || a != "2.1.200" {
+		t.Fatalf("got %q %q", b, a)
+	}
+}

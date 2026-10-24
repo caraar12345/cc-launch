@@ -121,7 +121,7 @@ type pickerModel struct {
 func newPickerModel(cfg *Config) pickerModel {
 	ti := textinput.New()
 	ti.Prompt = "❯ "
-	ti.Placeholder = "filter, or / to browse " + tildify(expandHome(cfg.DefaultPrefix))
+	ti.Placeholder = "filter, or / to browse"
 	ti.Focus()
 	sp := spinner.New(spinner.WithSpinner(spinner.MiniDot))
 	m := pickerModel{
@@ -163,11 +163,13 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.upgrading = false
 		switch {
 		case msg.timedOut:
-			m.upStatus = errStyle.Render("⚠ claude upgrade timed out after 30s")
+			m.upStatus = warnStyle.Render("! update timed out")
 		case msg.err != nil:
-			m.upStatus = errStyle.Render("⚠ claude upgrade failed: " + msg.err.Error())
+			m.upStatus = warnStyle.Render("! update failed")
+		case msg.before != "" && msg.after != "" && msg.before != msg.after:
+			m.upStatus = okStyle.Render("✓ updated to " + msg.after)
 		default:
-			m.upStatus = okStyle.Render("✓ Claude Code is up to date")
+			m.upStatus = okStyle.Render("✓ up to date")
 		}
 		if m.pending != "" {
 			m.chosen = m.pending
@@ -252,20 +254,13 @@ func (m pickerModel) View() string {
 	}
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("Claude Code launcher") + "  ")
-	switch {
-	case m.pending != "":
-		b.WriteString(m.spin.View() + " " + dimStyle.Render("waiting for claude upgrade (max 30s) before launching "+tildify(m.pending)))
-	case m.upgrading:
-		b.WriteString(m.spin.View() + " " + dimStyle.Render("checking for Claude Code updates…"))
-	default:
+	b.WriteString(titleStyle.Render("cc-launch") + dimStyle.Render(" | "))
+	if m.upgrading {
+		b.WriteString(m.spin.View() + dimStyle.Render(" upgrading"))
+	} else {
 		b.WriteString(m.upStatus)
 	}
 	b.WriteString("\n" + m.input.View() + "\n")
-
-	if m.browsing() {
-		b.WriteString(dimStyle.Render("browsing "+tildify(m.prefix)) + "\n")
-	}
 
 	start := 0
 	if m.cursor >= maxRows {
@@ -282,12 +277,10 @@ func (m pickerModel) View() string {
 	}
 	if len(m.items) == 0 {
 		switch {
-		case m.browsing():
-			b.WriteString(dimStyle.Render("  no matching subdirectories") + "\n")
+		case m.input.Value() != "":
+			b.WriteString(dimStyle.Render("  no matches") + "\n")
 		case len(m.cfg.Directories) == 0:
 			b.WriteString(dimStyle.Render("  no saved directories; type / to browse "+tildify(m.prefix)) + "\n")
-		default:
-			b.WriteString(dimStyle.Render("  no matches") + "\n")
 		}
 	} else if len(m.items) > end {
 		b.WriteString(dimStyle.Render(fmt.Sprintf("  … %d more", len(m.items)-end)) + "\n")

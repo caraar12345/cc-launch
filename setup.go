@@ -12,6 +12,7 @@ import (
 var (
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	dimStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	warnStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 	errStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	okStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("78"))
 	selStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
