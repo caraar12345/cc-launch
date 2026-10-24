@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 )
 
 func main() {
@@ -72,14 +71,11 @@ func run() error {
 	return launch(dir)
 }
 
-// launch replaces this process with claude running in dir.
+// launch runs claude in dir (see launch_unix.go / launch_windows.go).
 func launch(dir string) error {
 	bin, err := exec.LookPath("claude")
 	if err != nil {
 		return errors.New("claude not found in PATH")
 	}
-	if err := os.Chdir(dir); err != nil {
-		return err
-	}
-	return syscall.Exec(bin, []string{"claude"}, os.Environ())
+	return execClaude(bin, dir)
 }

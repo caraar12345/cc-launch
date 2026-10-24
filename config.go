@@ -83,7 +83,7 @@ func saveConfig(path string, cfg *Config) error {
 }
 
 func expandHome(p string) string {
-	if p != "~" && !strings.HasPrefix(p, "~/") {
+	if p != "~" && !strings.HasPrefix(p, "~/") && !strings.HasPrefix(p, `~\`) {
 		return p
 	}
 	home, err := os.UserHomeDir()

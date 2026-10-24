@@ -2,7 +2,7 @@
 
 Inline BubbleTea (v1) launcher that picks a directory and `exec`s `claude` in it.
 
-- `main.go`: load/bootstrap config, run picker, `chdir` + `syscall.Exec` claude.
+- `main.go`: load/bootstrap config, run picker, launch claude (`launch_unix.go`: chdir + `syscall.Exec`; `launch_windows.go`: child process with stdio passthrough and exit code propagated, since Windows has no exec).
 - `config.go`: `~/.config/cc-launch.yml` (preferred) or `.toml`; keys `default_prefix`, `directories`.
 - `setup.go`: first-run prompt for `default_prefix`; writes `cc-launch.yml`.
 - `picker.go`: main UI. Plain text filters `directories`; leading `/` browses subdirectories of `default_prefix` (nested `/a/b` and Tab-completion supported).
@@ -11,4 +11,4 @@ Inline BubbleTea (v1) launcher that picks a directory and `exec`s `claude` in it
 
 Commands: `go build -o cc-launch .`, `go test ./...`.
 
-CI: `.github/workflows/build.yml` runs gofmt/vet/test, cross-builds darwin+linux (amd64/arm64) as artifacts, and on a `v*` tag publishes a GitHub release with the tarballs. Windows is unsupported (`syscall.Exec`).
+CI: `.github/workflows/build.yml` runs gofmt/vet/test, cross-builds darwin/linux/windows (amd64/arm64; .zip for Windows) as artifacts, and on a `v*` tag publishes a GitHub release with the tarballs.

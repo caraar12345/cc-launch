@@ -56,6 +56,9 @@ func filterDirs(dirs []string, query string) []string {
 // e.g. "cc-launch" or "work/api". It lists subdirectories of prefix[/work]
 // whose name matches the final fragment: exact, then prefix, then substring.
 func browseDirs(prefix, rest string) []string {
+	if filepath.Separator == '\\' {
+		rest = strings.ReplaceAll(rest, `\`, "/")
+	}
 	dir, frag := "", rest
 	if i := strings.LastIndex(rest, "/"); i >= 0 {
 		dir, frag = rest[:i], rest[i+1:]
