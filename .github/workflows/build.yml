@@ -14,7 +14,110 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
-      release:
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4.4.0
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          v=$(tr -d '[:space:]' < VERSION)
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ] \
+             && ! gh release view "v$v" >/dev/null 2>&1; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.4.0
+      - uses: actions/setup-go@v5.6.0
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    # Signing secrets live in the `production` environment; only darwin needs them.
+    environment: ${{ matrix.goos == 'darwin' && github.event_name != 'pull_request' && 'production' || null }}
+    strategy:
+      matrix:
+        goos: [darwin, linux, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4.4.0
+      - uses: actions/setup-go@v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          if [ "$GOOS" = windows ]; then out=cc-launch.exe; else out=cc-launch; fi
+          go build -trimpath -ldflags "-s -w" -o "$out" .
+      - name: Decode secret
+        if: matrix.goos == 'darwin' && github.event_name != 'pull_request'
+        uses: davidSchuppa/base64Secret-toFile-action@v3
+        with:
+            secret: ${{ secrets.APPSTORE_CERTIFICATES_FILE_BASE64 }}
+            filename: cert.p12
+            destination-path: ./certs
+      - name: Sign a Mach-O binary
+        if: matrix.goos == 'darwin' && github.event_name != 'pull_request'
+        uses: indygreg/apple-code-sign-action@v1
+        with:
+          input_path: cc-launch
+          p12_file: ./certs/cert.p12
+          p12_password: ${{ secrets.APPSTORE_CERTIFICATES_PASSWORD }}
+      # Notarization only for release builds. A bare binary can't be stapled;
+      # Gatekeeper looks the ticket up online by the binary's hash.
+      - name: Write App Store Connect key
+        if: matrix.goos == 'darwin' && needs.version.outputs.release == 'true'
+        env:
+          KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+        run: |
+          mkdir -p certs
+          if printf '%s' "$KEY" | head -c1 | grep -q '{'; then
+            printf '%s' "$KEY" > certs/asc.json
+          else
+            printf '%s' "$KEY" | base64 -d > certs/asc.json
+          fi
+      - name: Zip for notarization
+        if: matrix.goos == 'darwin' && needs.version.outputs.release == 'true'
+        run: zip notarize.zip cc-launch
+      - name: Notarize
+        if: matrix.goos == 'darwin' && needs.version.outputs.release == 'true'
+        uses: indygreg/apple-code-sign-action@v1
+        with:
+          input_path: notarize.zip
+          sign: false
+          notarize: true
+          app_store_connect_api_key_json_file: ./certs/asc.json
+      - name: Package
+        run: |
+          name=cc-launch_${{ matrix.goos }}_${{ matrix.goarch }}
+          if [ "${{ matrix.goos }}" = windows ]; then
+            zip "$name.zip" cc-launch.exe
+          else
+            tar -czf "$name.tar.gz" cc-launch
+          fi
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: cc-launch_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: |
+            cc-launch_*.tar.gz
+            cc-launch_*.zip
+
+  release:
     if: needs.version.outputs.release == 'true'
     needs: [version, build]
     runs-on: ubuntu-latest
